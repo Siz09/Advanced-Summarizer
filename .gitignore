@@ -22,3 +22,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .env
+
+# Firebase service account keys
+swiftsummarypro-firebase-adminsdk-fbsvc-a227444275.json
+*-firebase-adminsdk-*.json
+serviceAccountKey.json
+temp_service_account.json
+
