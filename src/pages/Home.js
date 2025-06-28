@@ -10,7 +10,6 @@ import {
   Volume2,
   Download,
   Star,
-  ArrowRight,
   CheckCircle
 } from 'lucide-react';
 import FileUploader from '../components/FileUploader';
