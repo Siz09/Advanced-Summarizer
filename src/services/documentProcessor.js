@@ -12,19 +12,40 @@ class DocumentProcessor {
     const { summaryLength = 'medium', targetLanguage = null } = options;
     
     try {
+      // Validate file input
+      if (!file) {
+        throw new Error('No file provided');
+      }
+
+      // Ensure file.type exists and is a string
+      const fileType = file.type || '';
+      const fileName = file.name || '';
+      
       let extractedText = '';
       
       // Extract text based on file type
-      if (file.type === 'application/pdf') {
+      if (fileType === 'application/pdf') {
         extractedText = await this.extractFromPDF(file);
-      } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+      } else if (fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
         extractedText = await this.extractFromDOCX(file);
-      } else if (file.type.startsWith('text/')) {
+      } else if (fileType.startsWith('text/')) {
         extractedText = await this.extractFromText(file);
-      } else if (file.type.startsWith('image/')) {
+      } else if (fileType.startsWith('image/')) {
         extractedText = await this.extractFromImage(file);
       } else {
-        throw new Error('Unsupported file type');
+        // Try to determine file type from extension if MIME type is not available
+        const extension = fileName.toLowerCase().split('.').pop();
+        if (extension === 'pdf') {
+          extractedText = await this.extractFromPDF(file);
+        } else if (extension === 'docx') {
+          extractedText = await this.extractFromDOCX(file);
+        } else if (extension === 'txt') {
+          extractedText = await this.extractFromText(file);
+        } else if (['png', 'jpg', 'jpeg', 'gif', 'bmp'].includes(extension)) {
+          extractedText = await this.extractFromImage(file);
+        } else {
+          throw new Error(`Unsupported file type: ${fileType || 'unknown'} (${fileName})`);
+        }
       }
 
       if (!extractedText.trim()) {
@@ -42,9 +63,9 @@ class DocumentProcessor {
       return {
         ...result,
         originalText: extractedText,
-        fileName: file.name,
-        fileType: file.type,
-        fileSize: file.size
+        fileName: fileName,
+        fileType: fileType,
+        fileSize: file.size || 0
       };
 
     } catch (error) {
@@ -111,13 +132,13 @@ class DocumentProcessor {
         const result = await this.processFile(file, options);
         results.push({
           success: true,
-          fileName: file.name,
+          fileName: file.name || 'unknown',
           data: result
         });
       } catch (error) {
         results.push({
           success: false,
-          fileName: file.name,
+          fileName: file.name || 'unknown',
           error: error.message
         });
       }
