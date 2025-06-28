@@ -51,10 +51,16 @@ const FileUploader = ({ onProcessStart, onProcessComplete }) => {
   };
 
   const getFileIcon = (file) => {
+    if (!file.type || typeof file.type !== 'string') return FileText; // fallback icon
+  
     if (file.type.startsWith('image/')) return ImageIcon;
     if (file.type === 'application/pdf') return File;
+    if (file.type.startsWith('text/')) return FileText;
+    if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return FileText;
+  
     return FileText;
   };
+  
 
   const processFiles = async () => {
     if (uploadedFiles.length === 0) {
