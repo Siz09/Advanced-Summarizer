@@ -1,5 +1,5 @@
 {
-  "name": "advanceds-ummarizer",
+  "name": "swiftsummary-pro",
   "version": "0.1.0",
   "private": true,
   "dependencies": {
@@ -10,7 +10,17 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-scripts": "5.0.1",
-    "web-vitals": "^2.1.4"
+    "web-vitals": "^2.1.4",
+    "react-router-dom": "^6.8.1",
+    "lucide-react": "^0.263.1",
+    "framer-motion": "^10.16.4",
+    "react-dropzone": "^14.2.3",
+    "mammoth": "^1.6.0",
+    "pdf-parse": "^1.1.1",
+    "tesseract.js": "^4.1.1",
+    "axios": "^1.6.2",
+    "react-hot-toast": "^2.4.1",
+    "date-fns": "^2.30.0"
   },
   "scripts": {
     "start": "react-scripts start",
@@ -35,5 +45,6 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
-  }
+  },
+  "proxy": "http://localhost:3001"
 }
