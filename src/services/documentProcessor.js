@@ -17,35 +17,35 @@ class DocumentProcessor {
         throw new Error('No file provided');
       }
 
-      // Ensure file.type exists and is a string
-      const fileType = file.type || '';
-      const fileName = file.name || '';
+      // Get file information with safe fallbacks
+      const fileType = (file.type || '').toLowerCase();
+      const fileName = (file.name || '').toLowerCase();
+      
+      // Log for debugging
+      console.log('Processing file:', fileName, 'type:', fileType);
+      
+      // Extract file extension safely
+      const extension = fileName.includes('.') ? fileName.split('.').pop().trim() : '';
       
       let extractedText = '';
       
-      // Extract text based on file type
-      if (fileType === 'application/pdf') {
+      // Determine file type with extension fallback and multiple MIME type support
+      if (extension === 'pdf' || fileType === 'application/pdf' || fileType === 'application/x-pdf') {
         extractedText = await this.extractFromPDF(file);
-      } else if (fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+      } else if (
+        extension === 'docx' ||
+        fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      ) {
         extractedText = await this.extractFromDOCX(file);
-      } else if (fileType.startsWith('text/')) {
+      } else if (fileType.startsWith('text/') || extension === 'txt') {
         extractedText = await this.extractFromText(file);
-      } else if (fileType.startsWith('image/')) {
+      } else if (
+        fileType.startsWith('image/') ||
+        ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'].includes(extension)
+      ) {
         extractedText = await this.extractFromImage(file);
       } else {
-        // Try to determine file type from extension if MIME type is not available
-        const extension = fileName.toLowerCase().split('.').pop();
-        if (extension === 'pdf') {
-          extractedText = await this.extractFromPDF(file);
-        } else if (extension === 'docx') {
-          extractedText = await this.extractFromDOCX(file);
-        } else if (extension === 'txt') {
-          extractedText = await this.extractFromText(file);
-        } else if (['png', 'jpg', 'jpeg', 'gif', 'bmp'].includes(extension)) {
-          extractedText = await this.extractFromImage(file);
-        } else {
-          throw new Error(`Unsupported file type: ${fileType || 'unknown'} (${fileName})`);
-        }
+        throw new Error(`Unsupported file type: ${fileType || 'unknown'} (${fileName})`);
       }
 
       if (!extractedText.trim()) {
@@ -64,7 +64,7 @@ class DocumentProcessor {
         ...result,
         originalText: extractedText,
         fileName: fileName,
-        fileType: fileType,
+        fileType: fileType || `file.${extension}`,
         fileSize: file.size || 0
       };
 
