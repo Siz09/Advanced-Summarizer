@@ -14,6 +14,11 @@ class DocumentProcessor {
     try {
       let extractedText = '';
       
+      // Ensure file and file.type exist
+      if (!file || !file.type) {
+        throw new Error('Invalid file or missing file type');
+      }
+      
       // Extract text based on file type
       if (file.type === 'application/pdf') {
         extractedText = await this.extractFromPDF(file);
@@ -24,7 +29,7 @@ class DocumentProcessor {
       } else if (file.type.startsWith('image/')) {
         extractedText = await this.extractFromImage(file);
       } else {
-        throw new Error('Unsupported file type');
+        throw new Error('Unsupported file type: ' + file.type);
       }
 
       if (!extractedText.trim()) {
