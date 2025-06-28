@@ -8,7 +8,8 @@ import {
   query, 
   where, 
   orderBy, 
-  limit 
+  limit,
+  increment
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
@@ -93,11 +94,3 @@ export const summaryService = {
     }
   }
 };
-
-// Helper function for Firestore increment
-function increment(value) {
-  return {
-    _methodName: 'FieldValue.increment',
-    _delegate: value
-  };
-}
