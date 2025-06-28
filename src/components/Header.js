@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Zap, 
   Menu, 
@@ -9,18 +9,22 @@ import {
   LogOut, 
   Settings,
   Moon,
-  Sun
+  Sun,
+  Monitor,
+  ChevronDown
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import AuthModal from './AuthModal';
+import Button from './ui/Button';
 
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
   const { user, logout } = useAuth();
-  const { isDark, toggleTheme } = useTheme();
+  const { isDark, isSystemTheme, toggleTheme, setSystemTheme, setLightTheme, setDarkTheme } = useTheme();
   const location = useLocation();
 
   const navigation = [
@@ -29,22 +33,98 @@ const Header = () => {
     { name: 'About', href: '/about' },
   ];
 
+  const themeOptions = [
+    { name: 'Light', icon: Sun, action: setLightTheme, active: !isDark && !isSystemTheme },
+    { name: 'Dark', icon: Moon, action: setDarkTheme, active: isDark && !isSystemTheme },
+    { name: 'System', icon: Monitor, action: setSystemTheme, active: isSystemTheme },
+  ];
+
   const handleLogout = () => {
     logout();
     setIsUserMenuOpen(false);
   };
 
+  const headerVariants = {
+    hidden: { y: -100, opacity: 0 },
+    visible: { 
+      y: 0, 
+      opacity: 1,
+      transition: {
+        type: 'spring',
+        stiffness: 300,
+        damping: 30
+      }
+    }
+  };
+
+  const menuVariants = {
+    hidden: { opacity: 0, height: 0 },
+    visible: { 
+      opacity: 1, 
+      height: 'auto',
+      transition: {
+        duration: 0.3,
+        ease: 'easeInOut'
+      }
+    },
+    exit: { 
+      opacity: 0, 
+      height: 0,
+      transition: {
+        duration: 0.2,
+        ease: 'easeInOut'
+      }
+    }
+  };
+
+  const dropdownVariants = {
+    hidden: { opacity: 0, scale: 0.95, y: -10 },
+    visible: { 
+      opacity: 1, 
+      scale: 1, 
+      y: 0,
+      transition: {
+        type: 'spring',
+        stiffness: 300,
+        damping: 30
+      }
+    },
+    exit: { 
+      opacity: 0, 
+      scale: 0.95, 
+      y: -10,
+      transition: {
+        duration: 0.2
+      }
+    }
+  };
+
   return (
     <>
-      <header className="glass border-b border-white/20">
+      <motion.header
+        variants={headerVariants}
+        initial="hidden"
+        animate="visible"
+        className={`sticky top-0 z-40 backdrop-blur-lg border-b transition-colors duration-200 ${
+          isDark 
+            ? 'bg-gray-900/80 border-gray-700' 
+            : 'bg-white/80 border-gray-200'
+        }`}
+      >
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <Link to="/" className="flex items-center space-x-2 group">
-              <div className="p-2 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg group-hover:scale-110 transition-transform duration-200">
+              <motion.div 
+                whileHover={{ scale: 1.1, rotate: 5 }}
+                whileTap={{ scale: 0.95 }}
+                className="p-2 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg shadow-lg"
+              >
                 <Zap className="h-6 w-6 text-white" />
-              </div>
-              <span className="text-xl font-bold text-white">
+              </motion.div>
+              <span className={`text-xl font-bold transition-colors duration-200 ${
+                isDark ? 'text-white' : 'text-gray-900'
+              }`}>
                 SwiftSummary Pro
               </span>
             </Link>
@@ -55,147 +135,247 @@ const Header = () => {
                 <Link
                   key={item.name}
                   to={item.href}
-                  className={`text-white/90 hover:text-white transition-colors duration-200 font-medium ${
-                    location.pathname === item.href ? 'text-white border-b-2 border-white/50' : ''
+                  className={`relative font-medium transition-colors duration-200 ${
+                    location.pathname === item.href
+                      ? isDark ? 'text-blue-400' : 'text-blue-600'
+                      : isDark ? 'text-gray-300 hover:text-white' : 'text-gray-600 hover:text-gray-900'
                   }`}
                 >
                   {item.name}
+                  {location.pathname === item.href && (
+                    <motion.div
+                      layoutId="activeTab"
+                      className="absolute -bottom-1 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full"
+                    />
+                  )}
                 </Link>
               ))}
             </nav>
 
             {/* Desktop Actions */}
             <div className="hidden md:flex items-center space-x-4">
-              <button
-                onClick={toggleTheme}
-                className="p-2 text-white/80 hover:text-white transition-colors duration-200"
-                title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-              >
-                {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-              </button>
+              {/* Theme Selector */}
+              <div className="relative">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsThemeMenuOpen(!isThemeMenuOpen)}
+                  icon={isSystemTheme ? Monitor : isDark ? Moon : Sun}
+                  iconPosition="left"
+                  className="flex items-center space-x-1"
+                >
+                  <ChevronDown className="h-4 w-4 ml-1" />
+                </Button>
+
+                <AnimatePresence>
+                  {isThemeMenuOpen && (
+                    <motion.div
+                      variants={dropdownVariants}
+                      initial="hidden"
+                      animate="visible"
+                      exit="exit"
+                      className={`absolute right-0 mt-2 w-40 rounded-lg shadow-xl border z-50 ${
+                        isDark 
+                          ? 'bg-gray-800 border-gray-700' 
+                          : 'bg-white border-gray-200'
+                      }`}
+                      onMouseLeave={() => setIsThemeMenuOpen(false)}
+                    >
+                      {themeOptions.map((option) => (
+                        <button
+                          key={option.name}
+                          onClick={() => {
+                            option.action();
+                            setIsThemeMenuOpen(false);
+                          }}
+                          className={`w-full text-left px-4 py-2 flex items-center space-x-2 transition-colors duration-200 first:rounded-t-lg last:rounded-b-lg ${
+                            option.active
+                              ? isDark ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-600'
+                              : isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          <option.icon className="h-4 w-4" />
+                          <span>{option.name}</span>
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
 
               {user ? (
                 <div className="relative">
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                    className="flex items-center space-x-2 p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors duration-200"
+                    className="flex items-center space-x-2"
                   >
                     <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
                       <User className="h-4 w-4 text-white" />
                     </div>
-                    <span className="text-white font-medium">{user.name}</span>
-                  </button>
+                    <span className={isDark ? 'text-white' : 'text-gray-900'}>
+                      {user.name}
+                    </span>
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
 
-                  {isUserMenuOpen && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      className="absolute right-0 mt-2 w-48 glass rounded-lg shadow-xl border border-white/20 py-2"
-                    >
-                      <div className="px-4 py-2 border-b border-white/20">
-                        <p className="text-white font-medium">{user.name}</p>
-                        <p className="text-white/70 text-sm">{user.email}</p>
-                      </div>
-                      <button className="w-full text-left px-4 py-2 text-white/90 hover:bg-white/10 transition-colors duration-200 flex items-center space-x-2">
-                        <Settings className="h-4 w-4" />
-                        <span>Settings</span>
-                      </button>
-                      <button
-                        onClick={handleLogout}
-                        className="w-full text-left px-4 py-2 text-white/90 hover:bg-white/10 transition-colors duration-200 flex items-center space-x-2"
+                  <AnimatePresence>
+                    {isUserMenuOpen && (
+                      <motion.div
+                        variants={dropdownVariants}
+                        initial="hidden"
+                        animate="visible"
+                        exit="exit"
+                        className={`absolute right-0 mt-2 w-48 rounded-lg shadow-xl border z-50 ${
+                          isDark 
+                            ? 'bg-gray-800 border-gray-700' 
+                            : 'bg-white border-gray-200'
+                        }`}
+                        onMouseLeave={() => setIsUserMenuOpen(false)}
                       >
-                        <LogOut className="h-4 w-4" />
-                        <span>Logout</span>
-                      </button>
-                    </motion.div>
-                  )}
+                        <div className={`px-4 py-3 border-b ${
+                          isDark ? 'border-gray-700' : 'border-gray-200'
+                        }`}>
+                          <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                            {user.name}
+                          </p>
+                          <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                            {user.email}
+                          </p>
+                        </div>
+                        <button className={`w-full text-left px-4 py-2 flex items-center space-x-2 transition-colors duration-200 ${
+                          isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-50'
+                        }`}>
+                          <Settings className="h-4 w-4" />
+                          <span>Settings</span>
+                        </button>
+                        <button
+                          onClick={handleLogout}
+                          className={`w-full text-left px-4 py-2 flex items-center space-x-2 transition-colors duration-200 rounded-b-lg ${
+                            isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          <LogOut className="h-4 w-4" />
+                          <span>Logout</span>
+                        </button>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               ) : (
-                <button
+                <Button
+                  variant="primary"
+                  size="sm"
                   onClick={() => setIsAuthModalOpen(true)}
-                  className="btn-primary"
                 >
                   Sign In
-                </button>
+                </Button>
               )}
             </div>
 
             {/* Mobile Menu Button */}
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={isMenuOpen ? X : Menu}
               onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className="md:hidden p-2 text-white hover:bg-white/10 rounded-lg transition-colors duration-200"
-            >
-              {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-            </button>
+              className="md:hidden"
+            />
           </div>
 
           {/* Mobile Menu */}
-          {isMenuOpen && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              className="md:hidden border-t border-white/20 py-4"
-            >
-              <nav className="flex flex-col space-y-4">
-                {navigation.map((item) => (
-                  <Link
-                    key={item.name}
-                    to={item.href}
-                    onClick={() => setIsMenuOpen(false)}
-                    className={`text-white/90 hover:text-white transition-colors duration-200 font-medium ${
-                      location.pathname === item.href ? 'text-white' : ''
-                    }`}
-                  >
-                    {item.name}
-                  </Link>
-                ))}
-                <div className="flex items-center justify-between pt-4 border-t border-white/20">
-                  <button
-                    onClick={toggleTheme}
-                    className="flex items-center space-x-2 text-white/80 hover:text-white transition-colors duration-200"
-                  >
-                    {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-                    <span>{isDark ? 'Light Mode' : 'Dark Mode'}</span>
-                  </button>
-                  {!user && (
-                    <button
-                      onClick={() => {
-                        setIsAuthModalOpen(true);
-                        setIsMenuOpen(false);
-                      }}
-                      className="btn-primary"
+          <AnimatePresence>
+            {isMenuOpen && (
+              <motion.div
+                variants={menuVariants}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                className={`md:hidden border-t overflow-hidden ${
+                  isDark ? 'border-gray-700' : 'border-gray-200'
+                }`}
+              >
+                <nav className="py-4 space-y-4">
+                  {navigation.map((item) => (
+                    <Link
+                      key={item.name}
+                      to={item.href}
+                      onClick={() => setIsMenuOpen(false)}
+                      className={`block font-medium transition-colors duration-200 ${
+                        location.pathname === item.href
+                          ? isDark ? 'text-blue-400' : 'text-blue-600'
+                          : isDark ? 'text-gray-300' : 'text-gray-600'
+                      }`}
                     >
-                      Sign In
-                    </button>
-                  )}
-                </div>
-                {user && (
-                  <div className="pt-4 border-t border-white/20">
-                    <div className="flex items-center space-x-3 mb-4">
-                      <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
-                        <User className="h-5 w-5 text-white" />
-                      </div>
-                      <div>
-                        <p className="text-white font-medium">{user.name}</p>
-                        <p className="text-white/70 text-sm">{user.email}</p>
+                      {item.name}
+                    </Link>
+                  ))}
+                  
+                  <div className={`pt-4 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                    <div className="flex items-center justify-between mb-4">
+                      <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        Theme
+                      </span>
+                      <div className="flex space-x-2">
+                        {themeOptions.map((option) => (
+                          <Button
+                            key={option.name}
+                            variant={option.active ? "primary" : "ghost"}
+                            size="sm"
+                            icon={option.icon}
+                            onClick={option.action}
+                            className="p-2"
+                          />
+                        ))}
                       </div>
                     </div>
-                    <button
-                      onClick={handleLogout}
-                      className="w-full text-left text-white/90 hover:text-white transition-colors duration-200 flex items-center space-x-2"
-                    >
-                      <LogOut className="h-4 w-4" />
-                      <span>Logout</span>
-                    </button>
+                    
+                    {!user && (
+                      <Button
+                        variant="primary"
+                        onClick={() => {
+                          setIsAuthModalOpen(true);
+                          setIsMenuOpen(false);
+                        }}
+                        className="w-full"
+                      >
+                        Sign In
+                      </Button>
+                    )}
                   </div>
-                )}
-              </nav>
-            </motion.div>
-          )}
+                  
+                  {user && (
+                    <div className={`pt-4 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                      <div className="flex items-center space-x-3 mb-4">
+                        <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
+                          <User className="h-5 w-5 text-white" />
+                        </div>
+                        <div>
+                          <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                            {user.name}
+                          </p>
+                          <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                            {user.email}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        onClick={handleLogout}
+                        icon={LogOut}
+                        className="w-full justify-start"
+                      >
+                        Logout
+                      </Button>
+                    </div>
+                  )}
+                </nav>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
-      </header>
+      </motion.header>
 
       <AuthModal 
         isOpen={isAuthModalOpen} 
