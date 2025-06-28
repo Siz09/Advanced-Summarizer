@@ -1,11 +1,11 @@
 import mammoth from 'mammoth';
-import * as pdfjsLib from 'pdfjs-dist/webpack';
+import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/build/pdf';
 import { openaiService } from './openaiService';
 
 class DocumentProcessor {
   constructor() {
     // Configure PDF.js worker
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
+    GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
   }
 
   async processFile(file, options = {}) {
@@ -56,7 +56,7 @@ class DocumentProcessor {
   async extractFromPDF(file) {
     try {
       const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const pdf = await getDocument({ data: arrayBuffer }).promise;
       let fullText = '';
 
       for (let i = 1; i <= pdf.numPages; i++) {

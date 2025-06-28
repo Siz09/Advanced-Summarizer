@@ -1,12 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { 
   FileText, 
-  Clock, 
   TrendingUp, 
   Globe,
   Search,
-  Filter,
   Download,
   Trash2,
   Eye,
@@ -28,13 +26,7 @@ const Dashboard = () => {
   const [sortBy, setSortBy] = useState('newest');
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    if (user) {
-      loadSummaries();
-    }
-  }, [user]);
-
-  const loadSummaries = async () => {
+  const loadSummaries = useCallback(async () => {
     try {
       setIsLoading(true);
       const userSummaries = await summaryService.getUserSummaries(user.id);
@@ -45,7 +37,13 @@ const Dashboard = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      loadSummaries();
+    }
+  }, [user, loadSummaries]);
 
   const filteredSummaries = summaries
     .filter(summary => {

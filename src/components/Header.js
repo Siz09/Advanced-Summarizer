@@ -24,7 +24,7 @@ const Header = () => {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
   const { user, logout } = useAuth();
-  const { isDark, isSystemTheme, toggleTheme, setSystemTheme, setLightTheme, setDarkTheme } = useTheme();
+  const { isDark, isSystemTheme, setSystemTheme, setLightTheme, setDarkTheme } = useTheme();
   const location = useLocation();
 
   const navigation = [

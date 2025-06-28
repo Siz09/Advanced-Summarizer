@@ -5,7 +5,6 @@ import {
   Mic, 
   MicOff, 
   Image as ImageIcon,
-  Upload,
   Play,
   Square,
   Zap,
