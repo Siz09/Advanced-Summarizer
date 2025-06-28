@@ -1,4 +1,3 @@
-
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
@@ -6,13 +5,13 @@ import { getStorage } from 'firebase/storage';
 import { getAnalytics } from 'firebase/analytics';
 
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FB_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FB_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FB_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FB_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FB_SENDER,
-  appId: process.env.NEXT_PUBLIC_FB_APP_ID,
-  measurementId: process.env.NEXT_PUBLIC_FB_MEASUREMENT_ID,
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID,
+  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID,
 };
 
 // Initialize Firebase
@@ -22,6 +21,16 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
-export const analytics = getAnalytics(app);
 
-export default app; 
+// Initialize Analytics only in production and if supported
+let analytics = null;
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'production') {
+  try {
+    analytics = getAnalytics(app);
+  } catch (error) {
+    console.warn('Analytics not available:', error);
+  }
+}
+
+export { analytics };
+export default app;

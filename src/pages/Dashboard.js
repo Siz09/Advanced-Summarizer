@@ -11,10 +11,14 @@ import {
   Trash2,
   Eye,
   Calendar,
-  BarChart3
+  BarChart3,
+  Plus
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { summaryService } from '../services/summaryService';
 import { format } from 'date-fns';
+import toast from 'react-hot-toast';
+import { Link } from 'react-router-dom';
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -22,54 +26,31 @@ const Dashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterBy, setFilterBy] = useState('all');
   const [sortBy, setSortBy] = useState('newest');
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Mock data - in real app, fetch from API
-    const mockSummaries = [
-      {
-        id: '1',
-        title: 'Market Research Report Q4 2024',
-        originalText: 'Comprehensive market analysis...',
-        summary: 'Key findings from Q4 market research...',
-        language: 'en',
-        targetLanguage: 'es',
-        sentiment: 'positive',
-        wordCount: { original: 2500, summary: 180 },
-        createdAt: new Date('2024-01-15'),
-        type: 'pdf'
-      },
-      {
-        id: '2',
-        title: 'Product Development Strategy',
-        originalText: 'Strategic planning document...',
-        summary: 'Product roadmap and development priorities...',
-        language: 'en',
-        targetLanguage: 'fr',
-        sentiment: 'neutral',
-        wordCount: { original: 1800, summary: 220 },
-        createdAt: new Date('2024-01-12'),
-        type: 'docx'
-      },
-      {
-        id: '3',
-        title: 'Customer Feedback Analysis',
-        originalText: 'Customer survey responses...',
-        summary: 'Customer satisfaction insights and recommendations...',
-        language: 'en',
-        targetLanguage: 'de',
-        sentiment: 'positive',
-        wordCount: { original: 3200, summary: 280 },
-        createdAt: new Date('2024-01-10'),
-        type: 'text'
-      }
-    ];
-    setSummaries(mockSummaries);
-  }, []);
+    if (user) {
+      loadSummaries();
+    }
+  }, [user]);
+
+  const loadSummaries = async () => {
+    try {
+      setIsLoading(true);
+      const userSummaries = await summaryService.getUserSummaries(user.id);
+      setSummaries(userSummaries);
+    } catch (error) {
+      console.error('Error loading summaries:', error);
+      toast.error('Failed to load summaries');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const filteredSummaries = summaries
     .filter(summary => {
-      const matchesSearch = summary.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           summary.summary.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch = summary.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           summary.summary?.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesFilter = filterBy === 'all' || summary.type === filterBy;
       return matchesSearch && matchesFilter;
     })
@@ -80,7 +61,7 @@ const Dashboard = () => {
         case 'oldest':
           return new Date(a.createdAt) - new Date(b.createdAt);
         case 'title':
-          return a.title.localeCompare(b.title);
+          return (a.title || '').localeCompare(b.title || '');
         default:
           return 0;
       }
@@ -88,28 +69,40 @@ const Dashboard = () => {
 
   const stats = {
     totalSummaries: summaries.length,
-    totalWordsProcessed: summaries.reduce((acc, s) => acc + s.wordCount.original, 0),
-    averageReduction: Math.round(
-      summaries.reduce((acc, s) => acc + (1 - s.wordCount.summary / s.wordCount.original), 0) / summaries.length * 100
-    ),
-    languagesUsed: [...new Set(summaries.map(s => s.targetLanguage))].length
+    totalWordsProcessed: summaries.reduce((acc, s) => acc + (s.wordCount?.original || 0), 0),
+    averageReduction: summaries.length > 0 ? Math.round(
+      summaries.reduce((acc, s) => {
+        if (s.wordCount?.original && s.wordCount?.summary) {
+          return acc + (1 - s.wordCount.summary / s.wordCount.original);
+        }
+        return acc;
+      }, 0) / summaries.length * 100
+    ) : 0,
+    languagesUsed: [...new Set(summaries.map(s => s.targetLanguage).filter(Boolean))].length
   };
 
-  const handleDelete = (id) => {
-    setSummaries(prev => prev.filter(s => s.id !== id));
+  const handleDelete = async (id) => {
+    try {
+      await summaryService.deleteSummary(id);
+      setSummaries(prev => prev.filter(s => s.id !== id));
+      toast.success('Summary deleted successfully');
+    } catch (error) {
+      toast.error('Failed to delete summary');
+    }
   };
 
   const handleDownload = (summary) => {
-    const content = `Title: ${summary.title}\n\nSummary:\n${summary.summary}\n\nOriginal Word Count: ${summary.wordCount.original}\nSummary Word Count: ${summary.wordCount.summary}\nCreated: ${format(summary.createdAt, 'PPP')}`;
+    const content = `Title: ${summary.title || 'Untitled'}\n\nSummary:\n${summary.summary}\n\nOriginal Word Count: ${summary.wordCount?.original || 0}\nSummary Word Count: ${summary.wordCount?.summary || 0}\nCreated: ${format(new Date(summary.createdAt), 'PPP')}`;
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${summary.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.txt`;
+    a.download = `${(summary.title || 'summary').replace(/[^a-z0-9]/gi, '_').toLowerCase()}.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    toast.success('Summary downloaded');
   };
 
   if (!user) {
@@ -132,20 +125,39 @@ const Dashboard = () => {
     );
   }
 
+  if (isLoading) {
+    return (
+      <div className="max-w-7xl mx-auto">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <div className="spinner mx-auto mb-4"></div>
+            <p className="text-white/70">Loading your summaries...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto space-y-8">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="text-center"
+        className="flex flex-col md:flex-row md:items-center md:justify-between"
       >
-        <h1 className="text-4xl font-bold text-white mb-4">
-          Welcome back, {user.name}!
-        </h1>
-        <p className="text-white/80 text-lg">
-          Here's your summarization activity and insights
-        </p>
+        <div>
+          <h1 className="text-4xl font-bold text-white mb-4">
+            Welcome back, {user.name}!
+          </h1>
+          <p className="text-white/80 text-lg">
+            Here's your summarization activity and insights
+          </p>
+        </div>
+        <Link to="/" className="btn-primary flex items-center space-x-2 mt-4 md:mt-0">
+          <Plus className="h-5 w-5" />
+          <span>New Summary</span>
+        </Link>
       </motion.div>
 
       {/* Stats Cards */}
@@ -225,6 +237,8 @@ const Dashboard = () => {
               <option value="pdf">PDF</option>
               <option value="docx">DOCX</option>
               <option value="text">Text</option>
+              <option value="voice">Voice</option>
+              <option value="image">Image</option>
             </select>
           </div>
 
@@ -251,12 +265,17 @@ const Dashboard = () => {
           <div className="glass rounded-xl p-12 border border-white/20 text-center">
             <FileText className="h-16 w-16 text-white/30 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-white mb-2">No summaries found</h3>
-            <p className="text-white/70">
+            <p className="text-white/70 mb-6">
               {searchTerm || filterBy !== 'all' 
                 ? 'Try adjusting your search or filter criteria'
                 : 'Start by creating your first summary'
               }
             </p>
+            {!searchTerm && filterBy === 'all' && (
+              <Link to="/" className="btn-primary">
+                Create Your First Summary
+              </Link>
+            )}
           </div>
         ) : (
           filteredSummaries.map((summary, index) => (
@@ -270,27 +289,37 @@ const Dashboard = () => {
               <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
                 <div className="flex-1">
                   <div className="flex items-center space-x-3 mb-2">
-                    <h3 className="text-lg font-semibold text-white">{summary.title}</h3>
-                    <span className="px-2 py-1 bg-blue-500/20 text-blue-300 text-xs rounded-full uppercase">
-                      {summary.type}
-                    </span>
+                    <h3 className="text-lg font-semibold text-white">
+                      {summary.title || 'Untitled Summary'}
+                    </h3>
+                    {summary.type && (
+                      <span className="px-2 py-1 bg-blue-500/20 text-blue-300 text-xs rounded-full uppercase">
+                        {summary.type}
+                      </span>
+                    )}
                   </div>
                   
-                  <p className="text-white/80 mb-3 line-clamp-2">{summary.summary}</p>
+                  <p className="text-white/80 mb-3 line-clamp-2">
+                    {summary.summary || 'No summary available'}
+                  </p>
                   
                   <div className="flex items-center space-x-4 text-sm text-white/60">
                     <div className="flex items-center space-x-1">
                       <Calendar className="h-4 w-4" />
-                      <span>{format(summary.createdAt, 'MMM d, yyyy')}</span>
+                      <span>{format(new Date(summary.createdAt), 'MMM d, yyyy')}</span>
                     </div>
-                    <div className="flex items-center space-x-1">
-                      <FileText className="h-4 w-4" />
-                      <span>{summary.wordCount.original} → {summary.wordCount.summary} words</span>
-                    </div>
-                    <div className="flex items-center space-x-1">
-                      <Globe className="h-4 w-4" />
-                      <span>{summary.language} → {summary.targetLanguage}</span>
-                    </div>
+                    {summary.wordCount && (
+                      <div className="flex items-center space-x-1">
+                        <FileText className="h-4 w-4" />
+                        <span>{summary.wordCount.original} → {summary.wordCount.summary} words</span>
+                      </div>
+                    )}
+                    {summary.language && summary.targetLanguage && (
+                      <div className="flex items-center space-x-1">
+                        <Globe className="h-4 w-4" />
+                        <span>{summary.language} → {summary.targetLanguage}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
