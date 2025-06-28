@@ -44,12 +44,19 @@ const FileUploader = ({ onProcessStart, onProcessComplete }) => {
       toast.error(`${file.file.name} is not supported`);
     });
 
-    // Handle accepted files
+    // Handle accepted files - preserve original File object
     acceptedFiles.forEach((file) => {
+      // Debug logging
+      console.log('Dropped file:', file.name, 'type:', file.type, 'size:', file.size);
+      
       const fileWithId = {
-        ...file,
+        file, // Keep original File object here
         id: Date.now() + Math.random(),
-        status: 'ready'
+        status: 'ready',
+        // Add convenience properties for UI
+        name: file.name,
+        type: file.type,
+        size: file.size
       };
       setUploadedFiles(prev => [...prev, fileWithId]);
       toast.success(`${file.name} uploaded successfully`);
@@ -72,13 +79,15 @@ const FileUploader = ({ onProcessStart, onProcessComplete }) => {
     setUploadedFiles(prev => prev.filter(file => file.id !== fileId));
   };
 
-  const getFileIcon = (file) => {
-    if (!file.type || typeof file.type !== 'string') return FileText;
+  const getFileIcon = (fileItem) => {
+    const fileType = fileItem.type || fileItem.file?.type || '';
+    
+    if (!fileType || typeof fileType !== 'string') return FileText;
   
-    if (file.type.startsWith('image/')) return ImageIcon;
-    if (file.type === 'application/pdf') return File;
-    if (file.type.startsWith('text/')) return FileText;
-    if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return FileText;
+    if (fileType.startsWith('image/')) return ImageIcon;
+    if (fileType === 'application/pdf') return File;
+    if (fileType.startsWith('text/')) return FileText;
+    if (fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return FileText;
   
     return FileText;
   };
@@ -113,11 +122,14 @@ const FileUploader = ({ onProcessStart, onProcessComplete }) => {
       let result;
 
       if (uploadedFiles.length === 1) {
-        // Process single file
-        result = await documentProcessor.processFile(uploadedFiles[0], options);
+        // Process single file - pass the original File object
+        console.log('Processing single file:', uploadedFiles[0].file);
+        result = await documentProcessor.processFile(uploadedFiles[0].file, options);
       } else {
-        // Process multiple files
-        const results = await documentProcessor.processMultipleFiles(uploadedFiles, options);
+        // Process multiple files - pass original File objects
+        const originalFiles = uploadedFiles.map(f => f.file);
+        console.log('Processing multiple files:', originalFiles);
+        const results = await documentProcessor.processMultipleFiles(originalFiles, options);
         result = await documentProcessor.combineDocumentSummaries(results, options);
       }
 
@@ -286,11 +298,11 @@ const FileUploader = ({ onProcessStart, onProcessComplete }) => {
           className="space-y-3"
         >
           <h4 className="text-white font-medium">Uploaded Files ({uploadedFiles.length})</h4>
-          {uploadedFiles.map((file) => {
-            const FileIcon = getFileIcon(file);
+          {uploadedFiles.map((fileItem) => {
+            const FileIcon = getFileIcon(fileItem);
             return (
               <motion.div
-                key={file.id}
+                key={fileItem.id}
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 className="flex items-center justify-between p-4 bg-white/10 rounded-lg border border-white/20"
@@ -300,19 +312,19 @@ const FileUploader = ({ onProcessStart, onProcessComplete }) => {
                     <FileIcon className="h-5 w-5 text-white" />
                   </div>
                   <div>
-                    <p className="text-white font-medium">{file.name}</p>
+                    <p className="text-white font-medium">{fileItem.name}</p>
                     <p className="text-white/60 text-sm">
-                      {(file.size / 1024 / 1024).toFixed(2)} MB
+                      {(fileItem.size / 1024 / 1024).toFixed(2)} MB
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <div className={getStatusColor(file.status)}>
-                    {getStatusIcon(file.status)}
+                  <div className={getStatusColor(fileItem.status)}>
+                    {getStatusIcon(fileItem.status)}
                   </div>
                   {!isProcessing && (
                     <button
-                      onClick={() => removeFile(file.id)}
+                      onClick={() => removeFile(fileItem.id)}
                       className="p-1 text-white/60 hover:text-white transition-colors duration-200"
                     >
                       <X className="h-4 w-4" />
