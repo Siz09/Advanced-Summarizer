@@ -8,13 +8,35 @@ import {
   Image as ImageIcon,
   X,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Settings
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { documentProcessor } from '../services/documentProcessor';
+import { openaiService } from '../services/openaiService';
+import Button from './ui/Button';
 
 const FileUploader = ({ onProcessStart, onProcessComplete }) => {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [summaryLength, setSummaryLength] = useState('medium');
+  const [targetLanguage, setTargetLanguage] = useState('');
+  const [showSettings, setShowSettings] = useState(false);
+
+  const languages = [
+    { code: '', name: 'No Translation' },
+    { code: 'es', name: 'Spanish' },
+    { code: 'fr', name: 'French' },
+    { code: 'de', name: 'German' },
+    { code: 'it', name: 'Italian' },
+    { code: 'pt', name: 'Portuguese' },
+    { code: 'ru', name: 'Russian' },
+    { code: 'ja', name: 'Japanese' },
+    { code: 'ko', name: 'Korean' },
+    { code: 'zh', name: 'Chinese' },
+    { code: 'ar', name: 'Arabic' },
+    { code: 'hi', name: 'Hindi' }
+  ];
 
   const onDrop = useCallback((acceptedFiles, rejectedFiles) => {
     // Handle rejected files
@@ -51,7 +73,7 @@ const FileUploader = ({ onProcessStart, onProcessComplete }) => {
   };
 
   const getFileIcon = (file) => {
-    if (!file.type || typeof file.type !== 'string') return FileText; // fallback icon
+    if (!file.type || typeof file.type !== 'string') return FileText;
   
     if (file.type.startsWith('image/')) return ImageIcon;
     if (file.type === 'application/pdf') return File;
@@ -60,7 +82,6 @@ const FileUploader = ({ onProcessStart, onProcessComplete }) => {
   
     return FileText;
   };
-  
 
   const processFiles = async () => {
     if (uploadedFiles.length === 0) {
@@ -68,41 +89,143 @@ const FileUploader = ({ onProcessStart, onProcessComplete }) => {
       return;
     }
 
+    if (!openaiService.isConfigured()) {
+      toast.error('OpenAI API key not configured. Please add your API key to the .env file.');
+      return;
+    }
+
     setIsProcessing(true);
     onProcessStart();
 
     try {
-      // Simulate file processing
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      const startTime = Date.now();
+      
+      // Update file statuses to processing
+      setUploadedFiles(prev => 
+        prev.map(file => ({ ...file, status: 'processing' }))
+      );
 
-      // Mock processed data
-      const mockResult = {
-        originalText: "This is a sample extracted text from your uploaded file(s). In a real implementation, this would contain the actual extracted content from PDF, DOCX, or image files using appropriate parsing libraries.",
-        summary: "This is an AI-generated summary of your document. The summary captures the key points and main ideas while being significantly shorter than the original text.",
-        translation: "Esta es una traducción generada por IA de su documento. El resumen captura los puntos clave y las ideas principales mientras es significativamente más corto que el texto original.",
-        language: 'en',
-        targetLanguage: 'es',
-        sentiment: 'neutral',
-        keywords: ['document', 'summary', 'AI', 'processing', 'text'],
-        wordCount: {
-          original: 1250,
-          summary: 180
-        },
-        processingTime: 2.8
+      const options = {
+        summaryLength,
+        targetLanguage: targetLanguage || null
       };
 
-      onProcessComplete(mockResult);
+      let result;
+
+      if (uploadedFiles.length === 1) {
+        // Process single file
+        result = await documentProcessor.processFile(uploadedFiles[0], options);
+      } else {
+        // Process multiple files
+        const results = await documentProcessor.processMultipleFiles(uploadedFiles, options);
+        result = await documentProcessor.combineDocumentSummaries(results, options);
+      }
+
+      const processingTime = ((Date.now() - startTime) / 1000).toFixed(1);
+      result.processingTime = parseFloat(processingTime);
+
+      // Update file statuses to completed
+      setUploadedFiles(prev => 
+        prev.map(file => ({ ...file, status: 'completed' }))
+      );
+
+      onProcessComplete(result);
       toast.success('Files processed successfully!');
+      
     } catch (error) {
-      toast.error('Error processing files');
       console.error('Processing error:', error);
+      toast.error(error.message || 'Error processing files');
+      
+      // Update file statuses to error
+      setUploadedFiles(prev => 
+        prev.map(file => ({ ...file, status: 'error' }))
+      );
     } finally {
       setIsProcessing(false);
     }
   };
 
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'processing': return 'text-yellow-400';
+      case 'completed': return 'text-green-400';
+      case 'error': return 'text-red-400';
+      default: return 'text-green-400';
+    }
+  };
+
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'processing': return <div className="spinner w-4 h-4" />;
+      case 'completed': return <CheckCircle className="h-4 w-4" />;
+      case 'error': return <AlertCircle className="h-4 w-4" />;
+      default: return <CheckCircle className="h-4 w-4" />;
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {/* Settings Panel */}
+      <motion.div
+        initial={{ opacity: 0, height: 0 }}
+        animate={{ 
+          opacity: showSettings ? 1 : 0, 
+          height: showSettings ? 'auto' : 0 
+        }}
+        className="overflow-hidden"
+      >
+        <div className="glass rounded-xl p-6 border border-white/20 space-y-4">
+          <h3 className="text-white font-semibold mb-4">Processing Settings</h3>
+          
+          <div className="grid md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-white/90 text-sm font-medium mb-2">
+                Summary Length
+              </label>
+              <select
+                value={summaryLength}
+                onChange={(e) => setSummaryLength(e.target.value)}
+                className="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="short">Short (2-3 sentences)</option>
+                <option value="medium">Medium (1-2 paragraphs)</option>
+                <option value="long">Long (3-4 paragraphs)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-white/90 text-sm font-medium mb-2">
+                Translate To
+              </label>
+              <select
+                value={targetLanguage}
+                onChange={(e) => setTargetLanguage(e.target.value)}
+                className="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {languages.map((lang) => (
+                  <option key={lang.code} value={lang.code}>
+                    {lang.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Settings Toggle */}
+      <div className="flex justify-between items-center">
+        <h2 className="text-xl font-semibold text-white">Upload Documents</h2>
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={Settings}
+          onClick={() => setShowSettings(!showSettings)}
+        >
+          Settings
+        </Button>
+      </div>
+
       {/* Dropzone */}
       <motion.div
         {...getRootProps()}
@@ -136,6 +259,25 @@ const FileUploader = ({ onProcessStart, onProcessComplete }) => {
         </div>
       </motion.div>
 
+      {/* API Key Warning */}
+      {!openaiService.isConfigured() && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-yellow-500/20 border border-yellow-500/30 rounded-lg p-4"
+        >
+          <div className="flex items-center space-x-2">
+            <AlertCircle className="h-5 w-5 text-yellow-400" />
+            <div>
+              <p className="text-yellow-200 font-medium">OpenAI API Key Required</p>
+              <p className="text-yellow-200/80 text-sm">
+                Add your OpenAI API key to the .env file as REACT_APP_OPENAI_API_KEY to enable AI processing.
+              </p>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
       {/* Uploaded Files */}
       {uploadedFiles.length > 0 && (
         <motion.div
@@ -165,13 +307,17 @@ const FileUploader = ({ onProcessStart, onProcessComplete }) => {
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <CheckCircle className="h-5 w-5 text-green-400" />
-                  <button
-                    onClick={() => removeFile(file.id)}
-                    className="p-1 text-white/60 hover:text-white transition-colors duration-200"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
+                  <div className={getStatusColor(file.status)}>
+                    {getStatusIcon(file.status)}
+                  </div>
+                  {!isProcessing && (
+                    <button
+                      onClick={() => removeFile(file.id)}
+                      className="p-1 text-white/60 hover:text-white transition-colors duration-200"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               </motion.div>
             );
@@ -186,23 +332,17 @@ const FileUploader = ({ onProcessStart, onProcessComplete }) => {
           animate={{ opacity: 1, y: 0 }}
           className="text-center"
         >
-          <button
+          <Button
+            variant="primary"
+            size="lg"
             onClick={processFiles}
-            disabled={isProcessing}
-            className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center mx-auto"
+            disabled={isProcessing || !openaiService.isConfigured()}
+            loading={isProcessing}
+            icon={Upload}
+            className="mx-auto"
           >
-            {isProcessing ? (
-              <>
-                <div className="spinner mr-2" />
-                Processing Files...
-              </>
-            ) : (
-              <>
-                <Upload className="h-5 w-5 mr-2" />
-                Process Files
-              </>
-            )}
-          </button>
+            {isProcessing ? 'Processing Files...' : 'Process Files with AI'}
+          </Button>
         </motion.div>
       )}
 

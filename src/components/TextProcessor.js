@@ -9,9 +9,12 @@ import {
   Play,
   Square,
   Zap,
-  AlertCircle
+  AlertCircle,
+  Settings
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { openaiService } from '../services/openaiService';
+import Button from './ui/Button';
 
 const TextProcessor = ({ mode, onProcessStart, onProcessComplete }) => {
   const [text, setText] = useState('');
@@ -19,10 +22,29 @@ const TextProcessor = ({ mode, onProcessStart, onProcessComplete }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [selectedImage, setSelectedImage] = useState(null);
+  const [summaryLength, setSummaryLength] = useState('medium');
+  const [targetLanguage, setTargetLanguage] = useState('');
+  const [showSettings, setShowSettings] = useState(false);
   
   const mediaRecorderRef = useRef(null);
   const recordingIntervalRef = useRef(null);
   const fileInputRef = useRef(null);
+  const audioChunksRef = useRef([]);
+
+  const languages = [
+    { code: '', name: 'No Translation' },
+    { code: 'es', name: 'Spanish' },
+    { code: 'fr', name: 'French' },
+    { code: 'de', name: 'German' },
+    { code: 'it', name: 'Italian' },
+    { code: 'pt', name: 'Portuguese' },
+    { code: 'ru', name: 'Russian' },
+    { code: 'ja', name: 'Japanese' },
+    { code: 'ko', name: 'Korean' },
+    { code: 'zh', name: 'Chinese' },
+    { code: 'ar', name: 'Arabic' },
+    { code: 'hi', name: 'Hindi' }
+  ];
 
   useEffect(() => {
     return () => {
@@ -33,19 +55,23 @@ const TextProcessor = ({ mode, onProcessStart, onProcessComplete }) => {
   }, []);
 
   const startRecording = async () => {
+    if (!openaiService.isConfigured()) {
+      toast.error('OpenAI API key not configured for voice recording');
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaRecorderRef.current = new MediaRecorder(stream);
+      audioChunksRef.current = [];
       
-      const audioChunks = [];
       mediaRecorderRef.current.ondataavailable = (event) => {
-        audioChunks.push(event.data);
+        audioChunksRef.current.push(event.data);
       };
 
-      mediaRecorderRef.current.onstop = () => {
-        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-        // In a real app, you would send this to a speech-to-text service
-        simulateSpeechToText();
+      mediaRecorderRef.current.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+        await transcribeAudio(audioBlob);
         stream.getTracks().forEach(track => track.stop());
       };
 
@@ -69,35 +95,47 @@ const TextProcessor = ({ mode, onProcessStart, onProcessComplete }) => {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
       clearInterval(recordingIntervalRef.current);
-      toast.success('Recording stopped');
+      toast.success('Recording stopped, transcribing...');
     }
   };
 
-  const simulateSpeechToText = () => {
-    // Simulate speech-to-text conversion
-    setTimeout(() => {
-      const mockTranscription = "This is a sample transcription from your voice recording. In a real implementation, this would be the actual transcribed text from your speech using services like Google Speech-to-Text or OpenAI Whisper.";
-      setText(mockTranscription);
+  const transcribeAudio = async (audioBlob) => {
+    try {
+      const transcription = await openaiService.speechToText(audioBlob);
+      setText(transcription);
       toast.success('Speech converted to text');
-    }, 2000);
+    } catch (error) {
+      console.error('Transcription error:', error);
+      toast.error('Failed to transcribe audio');
+    }
   };
 
-  const handleImageUpload = (event) => {
+  const handleImageUpload = async (event) => {
     const file = event.target.files[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error('Image size should be less than 5MB');
-        return;
-      }
-      
-      setSelectedImage(file);
-      
-      // Simulate OCR processing
-      setTimeout(() => {
-        const mockOCRText = "This is sample text extracted from your image using OCR (Optical Character Recognition). In a real implementation, this would be the actual text extracted from your uploaded image using services like Tesseract.js or Google Vision API.";
-        setText(mockOCRText);
-        toast.success('Text extracted from image');
-      }, 3000);
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image size should be less than 5MB');
+      return;
+    }
+
+    if (!openaiService.isConfigured()) {
+      toast.error('OpenAI API key not configured for image processing');
+      return;
+    }
+    
+    setSelectedImage(file);
+    toast.loading('Extracting text from image...');
+    
+    try {
+      const extractedText = await openaiService.extractTextFromImage(file);
+      setText(extractedText);
+      toast.dismiss();
+      toast.success('Text extracted from image');
+    } catch (error) {
+      console.error('OCR error:', error);
+      toast.dismiss();
+      toast.error('Failed to extract text from image');
     }
   };
 
@@ -107,33 +145,35 @@ const TextProcessor = ({ mode, onProcessStart, onProcessComplete }) => {
       return;
     }
 
+    if (!openaiService.isConfigured()) {
+      toast.error('OpenAI API key not configured. Please add your API key to the .env file.');
+      return;
+    }
+
     setIsProcessing(true);
     onProcessStart();
 
     try {
-      // Simulate AI processing
-      await new Promise(resolve => setTimeout(resolve, 3000));
-
-      const mockResult = {
-        originalText: text,
-        summary: "This is an AI-generated summary of your text. The summary captures the key points and main ideas while being significantly shorter than the original content.",
-        translation: "Este es un resumen generado por IA de su texto. El resumen captura los puntos clave y las ideas principales mientras es significativamente más corto que el contenido original.",
-        language: 'en',
-        targetLanguage: 'es',
-        sentiment: 'neutral',
-        keywords: ['text', 'summary', 'AI', 'processing', 'content'],
-        wordCount: {
-          original: text.split(' ').length,
-          summary: 25
-        },
-        processingTime: 2.1
+      const startTime = Date.now();
+      
+      const options = {
+        length: summaryLength,
+        targetLanguage: targetLanguage || null,
+        includeKeywords: true,
+        includeSentiment: true
       };
 
-      onProcessComplete(mockResult);
+      const result = await openaiService.generateSummary(text, options);
+      
+      const processingTime = ((Date.now() - startTime) / 1000).toFixed(1);
+      result.processingTime = parseFloat(processingTime);
+      result.originalText = text;
+
+      onProcessComplete(result);
       toast.success('Text processed successfully!');
     } catch (error) {
-      toast.error('Error processing text');
       console.error('Processing error:', error);
+      toast.error(error.message || 'Error processing text');
     } finally {
       setIsProcessing(false);
     }
@@ -150,10 +190,66 @@ const TextProcessor = ({ mode, onProcessStart, onProcessComplete }) => {
       case 'text':
         return (
           <div className="space-y-4">
-            <div className="flex items-center space-x-2 mb-4">
-              <Type className="h-5 w-5 text-white" />
-              <h3 className="text-white font-semibold">Enter or Paste Text</h3>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Type className="h-5 w-5 text-white" />
+                <h3 className="text-white font-semibold">Enter or Paste Text</h3>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={Settings}
+                onClick={() => setShowSettings(!showSettings)}
+              >
+                Settings
+              </Button>
             </div>
+
+            {/* Settings Panel */}
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ 
+                opacity: showSettings ? 1 : 0, 
+                height: showSettings ? 'auto' : 0 
+              }}
+              className="overflow-hidden"
+            >
+              <div className="glass rounded-xl p-4 border border-white/20 space-y-4">
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-white/90 text-sm font-medium mb-2">
+                      Summary Length
+                    </label>
+                    <select
+                      value={summaryLength}
+                      onChange={(e) => setSummaryLength(e.target.value)}
+                      className="w-full p-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="short">Short</option>
+                      <option value="medium">Medium</option>
+                      <option value="long">Long</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-white/90 text-sm font-medium mb-2">
+                      Translate To
+                    </label>
+                    <select
+                      value={targetLanguage}
+                      onChange={(e) => setTargetLanguage(e.target.value)}
+                      className="w-full p-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      {languages.map((lang) => (
+                        <option key={lang.code} value={lang.code}>
+                          {lang.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+
             <textarea
               value={text}
               onChange={(e) => setText(e.target.value)}
@@ -170,10 +266,65 @@ const TextProcessor = ({ mode, onProcessStart, onProcessComplete }) => {
       case 'voice':
         return (
           <div className="space-y-6">
-            <div className="flex items-center space-x-2 mb-4">
-              <Mic className="h-5 w-5 text-white" />
-              <h3 className="text-white font-semibold">Voice Recording</h3>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Mic className="h-5 w-5 text-white" />
+                <h3 className="text-white font-semibold">Voice Recording</h3>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={Settings}
+                onClick={() => setShowSettings(!showSettings)}
+              >
+                Settings
+              </Button>
             </div>
+
+            {/* Settings Panel */}
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ 
+                opacity: showSettings ? 1 : 0, 
+                height: showSettings ? 'auto' : 0 
+              }}
+              className="overflow-hidden"
+            >
+              <div className="glass rounded-xl p-4 border border-white/20 space-y-4">
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-white/90 text-sm font-medium mb-2">
+                      Summary Length
+                    </label>
+                    <select
+                      value={summaryLength}
+                      onChange={(e) => setSummaryLength(e.target.value)}
+                      className="w-full p-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="short">Short</option>
+                      <option value="medium">Medium</option>
+                      <option value="long">Long</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-white/90 text-sm font-medium mb-2">
+                      Translate To
+                    </label>
+                    <select
+                      value={targetLanguage}
+                      onChange={(e) => setTargetLanguage(e.target.value)}
+                      className="w-full p-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      {languages.map((lang) => (
+                        <option key={lang.code} value={lang.code}>
+                          {lang.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
             
             <div className="text-center">
               <div className="w-32 h-32 mx-auto mb-6 relative">
@@ -200,26 +351,15 @@ const TextProcessor = ({ mode, onProcessStart, onProcessComplete }) => {
                 </div>
               )}
 
-              <button
+              <Button
+                variant={isRecording ? "danger" : "primary"}
+                size="lg"
                 onClick={isRecording ? stopRecording : startRecording}
-                className={`px-8 py-3 rounded-lg font-medium transition-all duration-200 ${
-                  isRecording
-                    ? 'bg-red-500 hover:bg-red-600 text-white'
-                    : 'bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white'
-                }`}
+                disabled={!openaiService.isConfigured()}
+                icon={isRecording ? Square : Play}
               >
-                {isRecording ? (
-                  <>
-                    <Square className="h-5 w-5 mr-2 inline" />
-                    Stop Recording
-                  </>
-                ) : (
-                  <>
-                    <Play className="h-5 w-5 mr-2 inline" />
-                    Start Recording
-                  </>
-                )}
-              </button>
+                {isRecording ? 'Stop Recording' : 'Start Recording'}
+              </Button>
             </div>
 
             {text && (
@@ -236,10 +376,65 @@ const TextProcessor = ({ mode, onProcessStart, onProcessComplete }) => {
       case 'image':
         return (
           <div className="space-y-6">
-            <div className="flex items-center space-x-2 mb-4">
-              <ImageIcon className="h-5 w-5 text-white" />
-              <h3 className="text-white font-semibold">Image OCR</h3>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <ImageIcon className="h-5 w-5 text-white" />
+                <h3 className="text-white font-semibold">Image OCR</h3>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={Settings}
+                onClick={() => setShowSettings(!showSettings)}
+              >
+                Settings
+              </Button>
             </div>
+
+            {/* Settings Panel */}
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ 
+                opacity: showSettings ? 1 : 0, 
+                height: showSettings ? 'auto' : 0 
+              }}
+              className="overflow-hidden"
+            >
+              <div className="glass rounded-xl p-4 border border-white/20 space-y-4">
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-white/90 text-sm font-medium mb-2">
+                      Summary Length
+                    </label>
+                    <select
+                      value={summaryLength}
+                      onChange={(e) => setSummaryLength(e.target.value)}
+                      className="w-full p-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="short">Short</option>
+                      <option value="medium">Medium</option>
+                      <option value="long">Long</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-white/90 text-sm font-medium mb-2">
+                      Translate To
+                    </label>
+                    <select
+                      value={targetLanguage}
+                      onChange={(e) => setTargetLanguage(e.target.value)}
+                      className="w-full p-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      {languages.map((lang) => (
+                        <option key={lang.code} value={lang.code}>
+                          {lang.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
 
             <div className="text-center">
               <input
@@ -304,29 +499,41 @@ const TextProcessor = ({ mode, onProcessStart, onProcessComplete }) => {
     <div className="space-y-6">
       {renderContent()}
 
+      {/* API Key Warning */}
+      {!openaiService.isConfigured() && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-yellow-500/20 border border-yellow-500/30 rounded-lg p-4"
+        >
+          <div className="flex items-center space-x-2">
+            <AlertCircle className="h-5 w-5 text-yellow-400" />
+            <div>
+              <p className="text-yellow-200 font-medium">OpenAI API Key Required</p>
+              <p className="text-yellow-200/80 text-sm">
+                Add your OpenAI API key to the .env file as REACT_APP_OPENAI_API_KEY to enable AI processing.
+              </p>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
       {text && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="text-center pt-6 border-t border-white/20"
         >
-          <button
+          <Button
+            variant="primary"
+            size="lg"
             onClick={processText}
-            disabled={isProcessing}
-            className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center mx-auto"
+            disabled={isProcessing || !openaiService.isConfigured()}
+            loading={isProcessing}
+            icon={Zap}
           >
-            {isProcessing ? (
-              <>
-                <div className="spinner mr-2" />
-                Processing Text...
-              </>
-            ) : (
-              <>
-                <Zap className="h-5 w-5 mr-2" />
-                Summarize & Translate
-              </>
-            )}
-          </button>
+            {isProcessing ? 'Processing Text...' : 'Summarize & Translate with AI'}
+          </Button>
         </motion.div>
       )}
 
