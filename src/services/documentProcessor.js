@@ -4,8 +4,8 @@ import { openaiService } from './openaiService';
 
 class DocumentProcessor {
   constructor() {
-    // Configure PDF.js worker - use version that matches your pdfjs-dist package (4.0.379)
-    GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js`;
+    // Configure PDF.js worker - use local worker file to avoid version mismatch
+    GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
   }
 
   async processFile(file, options = {}) {
