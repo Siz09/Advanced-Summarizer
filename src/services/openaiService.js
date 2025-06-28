@@ -2,10 +2,21 @@ import OpenAI from 'openai';
 
 class OpenAIService {
   constructor() {
-    this.openai = new OpenAI({
-      apiKey: process.env.REACT_APP_OPENAI_API_KEY,
-      dangerouslyAllowBrowser: true // Note: In production, use a backend proxy
-    });
+    this.openai = null;
+  }
+
+  // Lazy initialization of OpenAI client
+  getClient() {
+    if (!this.openai) {
+      if (!this.isConfigured()) {
+        throw new Error('OpenAI API key not configured. Please add REACT_APP_OPENAI_API_KEY to your .env file.');
+      }
+      this.openai = new OpenAI({
+        apiKey: process.env.REACT_APP_OPENAI_API_KEY,
+        dangerouslyAllowBrowser: true // Note: In production, use a backend proxy
+      });
+    }
+    return this.openai;
   }
 
   async generateSummary(text, options = {}) {
@@ -18,6 +29,8 @@ class OpenAIService {
     } = options;
 
     try {
+      const openai = this.getClient();
+      
       const lengthInstructions = {
         short: 'in 2-3 sentences',
         medium: 'in 1-2 paragraphs',
@@ -48,7 +61,7 @@ class OpenAIService {
         }
       `;
 
-      const response = await this.openai.chat.completions.create({
+      const response = await openai.chat.completions.create({
         model: 'gpt-3.5-turbo',
         messages: [
           {
@@ -88,6 +101,8 @@ class OpenAIService {
 
   async translateText(text, targetLanguage) {
     try {
+      const openai = this.getClient();
+      
       const languageNames = {
         'es': 'Spanish',
         'fr': 'French',
@@ -104,7 +119,7 @@ class OpenAIService {
 
       const targetLangName = languageNames[targetLanguage] || targetLanguage;
 
-      const response = await this.openai.chat.completions.create({
+      const response = await openai.chat.completions.create({
         model: 'gpt-3.5-turbo',
         messages: [
           {
@@ -129,10 +144,12 @@ class OpenAIService {
 
   async extractTextFromImage(imageFile) {
     try {
+      const openai = this.getClient();
+      
       // Convert image to base64
       const base64Image = await this.fileToBase64(imageFile);
 
-      const response = await this.openai.chat.completions.create({
+      const response = await openai.chat.completions.create({
         model: 'gpt-4-vision-preview',
         messages: [
           {
@@ -163,10 +180,12 @@ class OpenAIService {
 
   async speechToText(audioBlob) {
     try {
+      const openai = this.getClient();
+      
       // Convert blob to file
       const audioFile = new File([audioBlob], 'audio.wav', { type: 'audio/wav' });
 
-      const response = await this.openai.audio.transcriptions.create({
+      const response = await openai.audio.transcriptions.create({
         file: audioFile,
         model: 'whisper-1',
         language: 'en'
@@ -190,6 +209,10 @@ class OpenAIService {
 
   // Check if API key is configured
   isConfigured() {
+    console.log('Environment variable check:', {
+      hasKey: !!process.env.REACT_APP_OPENAI_API_KEY,
+      keyValue: process.env.REACT_APP_OPENAI_API_KEY ? '***' + process.env.REACT_APP_OPENAI_API_KEY.slice(-4) : 'undefined'
+    });
     return !!process.env.REACT_APP_OPENAI_API_KEY && 
            process.env.REACT_APP_OPENAI_API_KEY !== 'your_openai_api_key_here';
   }
